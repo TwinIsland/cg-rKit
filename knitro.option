@@ -1,0 +1,77 @@
+
+# Artelys example options file
+# http://www.artelys.com/tools/knitro_doc/
+
+# Which NLP algorithm to use.
+#   auto   = 0 = let Knitro choose the algorithm
+#   direct = 1 = use Interior (barrier) Direct algorithm
+#   cg     = 2 = use Interior (barrier) CG algorithm
+#   active = 3 = use Active Set SLQP algorithm
+#   sqp    = 4 = use Active Set SQP algorithm
+#   multi  = 5 = run multiple algorithms (perhaps in parallel)
+#   al     = 6 = use Augmented Lagrangian algorithm
+#
+# The Interior-Point algorithms are recommended for large problems.
+# The Active Set or SQP algorithms may be preferable for small
+# problems (particularly when function evaluations are expensive).
+#
+# NOTE: Use "lp_algorithm" to set the algorithm for LP problems.
+#
+nlp_algorithm    2
+
+hessopt 4
+outlev 3
+
+# Which barrier parameter update strategy for Interior-Point algorithm.
+#   auto     = 0 = let Knitro choose the strategy
+#   monotone = 1
+#   adaptive = 2
+#   probing  = 3
+#   dampmpc  = 4
+#   fullmpc  = 5
+#   quality  = 6
+#
+# This is an important option for the Interior-Point "direct" algorithm.
+# Experiment with different values.
+#
+bar_murule   2
+
+# bar_maxcrossit 5  # This option will "clean-up" the Interior-Point solution
+                  # (but may be expensive on large problems)
+
+maxit 1000        # Maximum number of iterations to allow
+
+# Specifies the final relative stopping tolerance for the feasibility error.
+feastol      1e-09
+
+# Specifies the final relative stopping tolerance for the optimality error.
+opttol       1e-09
+
+# Tolerance for stopping on small (feasible) changes to the objective.
+ftol 1e-10
+
+# Tolerance for stopping on small changes to the solution estimate.
+xtol 1e-10
+
+soltype 1
+
+linsolver 6
+blasoption 1
+numthreads 64
+
+# DEBUG
+derivcheck 0
+derivcheck_type 2
+
+# honorbnds 1
+bar_feasible 1
+
+ms_enable 0
+#ms_maxbndrange 0.6
+#ms_maxsolves 30
+
+bar_initmu 1e-4
+
+# soc 2
+
+bar_directinterval 2

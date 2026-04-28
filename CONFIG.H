@@ -5,6 +5,9 @@
 #define PROJECT_NAME "Ball Minimal"
 #define PROJECT_VERSION "0.1.0"
 
+#define WORKSPACE_PATH "./workspace"
+#define KNITRO_OPT_CONFIG_PATH "./knitro.option"
+
 // Logging configuration
 // 1 = enable debug logs, 0 = hide debug logs
 #define LOG_ENABLE_DEBUG 0
