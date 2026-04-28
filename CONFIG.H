@@ -2,12 +2,12 @@
 #define CONFIG_H
 
 // Project metadata
-#define PROJECT_NAME "rkit Template"
+#define PROJECT_NAME "Ball Minimal"
 #define PROJECT_VERSION "0.1.0"
 
 // Logging configuration
 // 1 = enable debug logs, 0 = hide debug logs
-#define LOG_ENABLE_DEBUG 1
+#define LOG_ENABLE_DEBUG 0
 
 // 1 = include timestamps in console/file messages, 0 = no timestamps
 #define LOG_SHOW_TIME 1
