@@ -1,17 +1,18 @@
 /* cc build.c -o build_tool && ./build_tool
-   ./build_tool              -- debug build (configure if no presets; auto-load .build_opts)
+   ./build_tool              -- debug build (configure if no presets; auto-load .project_opt)
    ./build_tool --release    -- release build
    ./build_tool --run        -- run debug exe (build first if needed)
    ./build_tool --run --release -- run release exe (build first if needed)
-   ./build_tool --config     -- reconfigure prefix only, reuse .build_opts for libraries
-   ./build_tool --config-all -- reconfigure everything from scratch */
+   ./build_tool --config     -- reload .project_opt and .user_opt; prompt only if missing
+   ./build_tool --config-all -- reconfigure .project_opt and .user_opt */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define PRESETS_FILE "CMakePresets.json"
-#define OPTS_FILE    ".build_opts"
+#define PRESETS_FILE       "CMakePresets.json"
+#define PROJECT_OPTS_FILE  ".project_opt"
+#define USER_OPTS_FILE     ".user_opt"
 
 typedef struct { const char* flag; const char* label; } Lib;
 
@@ -96,20 +97,18 @@ static void ask_prefix(Opts* o) {
 
 /* ---------- opts serialize / deserialize ---------- */
 
-/* Saves only library selections. Prefix is always asked fresh - not cached. */
-static void save_opts(const Opts* o) {
+static void save_project_opts(const Opts* o) {
     int i;
-    FILE* f = fopen(OPTS_FILE, "w");
-    if (!f) { fprintf(stderr, "warning: cannot write %s\n", OPTS_FILE); return; }
+    FILE* f = fopen(PROJECT_OPTS_FILE, "w");
+    if (!f) { fprintf(stderr, "warning: cannot write %s\n", PROJECT_OPTS_FILE); return; }
     for (i = 0; i < N; i++)
         fprintf(f, "%s=%s\n", LIBS[i].flag, o->sel[i] ? "ON" : "OFF");
     fclose(f);
 }
 
-/* Returns 1 if loaded, 0 if file missing. Only reads library flags. */
-static int load_opts(Opts* o) {
+static int load_project_opts(Opts* o) {
     char line[512];
-    FILE* f = fopen(OPTS_FILE, "r");
+    FILE* f = fopen(PROJECT_OPTS_FILE, "r");
     if (!f) return 0;
     memset(o, 0, sizeof(*o));
     while (fgets(line, sizeof(line), f)) {
@@ -130,6 +129,48 @@ static int load_opts(Opts* o) {
     }
     fclose(f);
     return 1;
+}
+
+static void save_user_opts(const Opts* o) {
+    FILE* f = fopen(USER_OPTS_FILE, "w");
+    if (!f) { fprintf(stderr, "warning: cannot write %s\n", USER_OPTS_FILE); return; }
+    fprintf(f, "CMAKE_PREFIX_PATH=%s\n", o->use_conda ? o->conda : "");
+    fclose(f);
+}
+
+static int load_user_opts(Opts* o) {
+    char line[1024];
+    FILE* f = fopen(USER_OPTS_FILE, "r");
+    if (!f) return 0;
+    while (fgets(line, sizeof(line), f)) {
+        char* eq = strchr(line, '=');
+        int len;
+        char* val;
+        if (!eq) continue;
+        *eq = '\0';
+        val = eq + 1;
+        len = (int)strlen(val);
+        if (len > 0 && val[len-1] == '\n') val[--len] = '\0';
+        if (strcmp(line, "CMAKE_PREFIX_PATH") == 0) {
+            if (len > 0) {
+                if (len >= (int)sizeof(o->conda)) len = (int)sizeof(o->conda) - 1;
+                memcpy(o->conda, val, (size_t)len);
+                o->conda[len] = '\0';
+                o->use_conda = 1;
+            } else {
+                o->conda[0] = '\0';
+                o->use_conda = 0;
+            }
+        }
+    }
+    fclose(f);
+    return 1;
+}
+
+static void print_libs(const Opts* o) {
+    int i;
+    for (i = 0; i < N; i++)
+        printf("  %-12s %s\n", LIBS[i].flag, o->sel[i] ? "ON" : "OFF");
 }
 
 /* ---------- preset generation ---------- */
@@ -236,12 +277,42 @@ static void ask_libs(Opts* o) {
 }
 
 static void finish_configure(Opts* o) {
-    save_opts(o);
-    printf("wrote %s\n", OPTS_FILE);
+    save_project_opts(o);
+    printf("wrote %s\n", PROJECT_OPTS_FILE);
+    save_user_opts(o);
+    printf("wrote %s\n", USER_OPTS_FILE);
     gen_presets(o);
     post_configure(o);
     printf("\nrun  ./build_tool           to debug-build\n"
            "run  ./build_tool --release to release-build\n");
+}
+
+static int load_or_create_project_opts(Opts* o) {
+    if (load_project_opts(o)) {
+        printf("loaded project-level libraries from %s:\n", PROJECT_OPTS_FILE);
+        print_libs(o);
+        return 1;
+    }
+
+    printf("no %s found - creating project-level options\n", PROJECT_OPTS_FILE);
+    memset(o, 0, sizeof(*o));
+    ask_libs(o);
+    save_project_opts(o);
+    printf("wrote %s\n", PROJECT_OPTS_FILE);
+    return 1;
+}
+
+static void load_or_create_user_opts(Opts* o) {
+    if (load_user_opts(o)) {
+        printf("loaded user-level options from %s\n", USER_OPTS_FILE);
+        return;
+    }
+
+    printf("no %s found - creating user-level options\n", USER_OPTS_FILE);
+    printf("\nPrefix:\n  1) default\n  2) conda\n");
+    ask_prefix(o);
+    save_user_opts(o);
+    printf("wrote %s\n", USER_OPTS_FILE);
 }
 
 /* ---------- build ---------- */
@@ -345,10 +416,11 @@ int main(int argc, char* argv[]) {
             "  --run --release  run release executable (builds first if needed)\n"
             "\n"
             "configure:\n"
-            "  --config         reconfigure prefix only; reuse library choices from %s\n"
-            "  --config-all     reconfigure everything from scratch\n"
-            "\n"
-            OPTS_FILE, OPTS_FILE
+            "  --config         reload %s and %s; prompt only for missing files\n"
+            "  --config-all     reconfigure %s and %s from scratch\n"
+            "\n",
+            PROJECT_OPTS_FILE, USER_OPTS_FILE,
+            PROJECT_OPTS_FILE, USER_OPTS_FILE
         );
         return 0;
     }
@@ -365,43 +437,22 @@ int main(int argc, char* argv[]) {
     }
 
     if (flag_config) {
-        /* reuse library choices from .build_opts, ask only prefix */
-        printf("=== metabuild (prefix reconfigure) ===\n\n");
+        printf("=== metabuild (config reload) ===\n\n");
         memset(&o, 0, sizeof(o));
-        if (load_opts(&o)) {
-            printf("reusing libraries from %s:\n", OPTS_FILE);
-            for (i = 0; i < N; i++)
-                printf("  %-12s %s\n", LIBS[i].flag, o.sel[i] ? "ON" : "OFF");
-        } else {
-            printf("no %s found - asking for libraries too:\n", OPTS_FILE);
-            ask_libs(&o);
-        }
-        printf("\nPrefix:\n  1) default\n  2) conda\n");
-        ask_prefix(&o);
-        finish_configure(&o);
+        load_or_create_project_opts(&o);
+        load_or_create_user_opts(&o);
+        gen_presets(&o);
+        post_configure(&o);
         return 0;
     }
 
     if (!file_exists(PRESETS_FILE)) {
-        if (load_opts(&o)) {
-            /* presets missing but library opts on disk - ask prefix, regenerate, build */
-            printf("loaded libraries from %s:\n", OPTS_FILE);
-            for (i = 0; i < N; i++)
-                printf("  %-12s %s\n", LIBS[i].flag, o.sel[i] ? "ON" : "OFF");
-            printf("\nPrefix:\n  1) default\n  2) conda\n");
-            ask_prefix(&o);
-            gen_presets(&o);
-            post_configure(&o);
-        } else {
-            /* first run - ask everything */
-            printf("=== metabuild ===\n\n");
-            memset(&o, 0, sizeof(o));
-            ask_libs(&o);
-            printf("\nPrefix:\n  1) default\n  2) conda\n");
-            ask_prefix(&o);
-            finish_configure(&o);
-            return 0;
-        }
+        printf("=== metabuild ===\n\n");
+        memset(&o, 0, sizeof(o));
+        load_or_create_project_opts(&o);
+        load_or_create_user_opts(&o);
+        gen_presets(&o);
+        post_configure(&o);
     }
 
     return do_build(flag_release);

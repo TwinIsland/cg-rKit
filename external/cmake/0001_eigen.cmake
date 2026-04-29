@@ -2,6 +2,10 @@ if(USE_EIGEN)
 
 include(FetchContent)
 
+set(BUILD_TESTING OFF CACHE BOOL "Build Eigen tests" FORCE)
+set(EIGEN_BUILD_DOC OFF CACHE BOOL "Build Eigen documentation" FORCE)
+set(EIGEN_BUILD_PKGCONFIG OFF CACHE BOOL "Build Eigen pkg-config file" FORCE)
+
 fetchcontent_declare(
   external_eigen
   GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
