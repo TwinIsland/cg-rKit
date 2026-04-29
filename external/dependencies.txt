@@ -1,0 +1,4 @@
+# External option dependencies.
+# Format: OPTION: REQUIRED_OPTION [REQUIRED_OPTION ...]
+USE_LIBIGL: USE_EIGEN
+USE_CGAL: USE_EIGEN

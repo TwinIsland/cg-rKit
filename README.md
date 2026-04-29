@@ -5,7 +5,7 @@ A lightweight C++ framework for fast computer graphics research prototypes.
 ## Build / Run
 
 ```sh
-cc build.c -o build_tool && ./build_tool --run
+cc build.c -o build_tool && ./build_tool --run --release
 ```
 
 Always-on dependency:
@@ -20,7 +20,7 @@ Optional dependencies:
 - libigl
 - CGAL
 
-## Developers
+## For Developer
 
 For the first setup on a new project, configure both option scopes:
 
@@ -35,19 +35,25 @@ The generated option files are split by ownership:
 
 On normal setup or after editing `.project_opt` or `.user_opt`, run `--config`.
 It reloads both serialized option files and only prompts for the file that is
-missing:
+missing.
 
 ```sh
 ./build_tool --config
 ```
 
-When you want to re-answer both project dependency and local machine prompts,
-run:
+**Add new external library:**
 
-```sh
-./build_tool --config-all
+All external lirabry should be managed in the same manner as those in `external` folder.  First add a `cmake` to fetch the new library and make it available. Then, update `external/dependencies.txt` if needed. The format
+is intentionally simple:
+
+```text
+USE_SOME_LIB: USE_EIGEN, USE_TBB
 ```
 
+When presets are regenerated, `build_tool` checks `.project_opt` against this
+file and asks whether to auto-enable missing required options.
+
+Finally, update the meta build system `build.c` to register the new external library.
 
 ### CLI:
 
@@ -55,8 +61,8 @@ run:
 usage: ./build_tool [options]
 
 build:
-  (no flags)       debug build; runs configure if no CMakePresets.json
-  --release        release build
+  (no flags)       reload saved options, then debug build
+  --release        reload saved options, then release build
 
 run:
   --run            run debug executable (builds first if needed)

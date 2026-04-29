@@ -1,19 +1,13 @@
-include(FetchContent)
+set(NLOHMANN_JSON_ROOT "${PROJECT_SOURCE_DIR}/third-party/nlohmann_json")
+set(NLOHMANN_JSON_HEADER "${NLOHMANN_JSON_ROOT}/json.hpp")
 
-set(JSON_BuildTests OFF CACHE BOOL "Build nlohmann/json tests" FORCE)
-set(JSON_Install OFF CACHE BOOL "Install nlohmann/json targets" FORCE)
-
-fetchcontent_declare(
-  external_json
-  GIT_REPOSITORY "https://github.com/nlohmann/json.git"
-  GIT_TAG "v3.12.0"
-  GIT_SHALLOW TRUE
-)
-
-fetchcontent_makeavailable(external_json)
-
-if(TARGET nlohmann_json::nlohmann_json)
-  register_external_target(nlohmann_json::nlohmann_json)
-else()
-  message(FATAL_ERROR "nlohmann/json fetch succeeded but no CMake target was exposed.")
+if(NOT EXISTS "${NLOHMANN_JSON_HEADER}")
+  message(FATAL_ERROR "Cached nlohmann/json header not found: ${NLOHMANN_JSON_HEADER}")
 endif()
+
+add_library(project_nlohmann_json INTERFACE)
+target_include_directories(project_nlohmann_json INTERFACE "${NLOHMANN_JSON_ROOT}")
+
+add_library(nlohmann_json::nlohmann_json ALIAS project_nlohmann_json)
+
+register_external_target(nlohmann_json::nlohmann_json)

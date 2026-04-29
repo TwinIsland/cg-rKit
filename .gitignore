@@ -648,3 +648,4 @@ logs
 build_tool
 CMakePresets.json
 .user_opt
+.vscode

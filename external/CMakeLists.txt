@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 
-if(POLICY CMP0169)
-  cmake_policy(SET CMP0169 OLD)
-endif()
-
 set(PROJECT_EXTERNAL_TARGETS "")
 
 macro(register_external_target target_name)

@@ -1,5 +1,5 @@
 /* cc build.c -o build_tool && ./build_tool
-   ./build_tool              -- debug build (configure if no presets; auto-load .project_opt)
+   ./build_tool              -- reload saved options, then debug build
    ./build_tool --release    -- release build
    ./build_tool --run        -- run debug exe (build first if needed)
    ./build_tool --run --release -- run release exe (build first if needed)
@@ -13,6 +13,7 @@
 #define PRESETS_FILE       "CMakePresets.json"
 #define PROJECT_OPTS_FILE  ".project_opt"
 #define USER_OPTS_FILE     ".user_opt"
+#define DEPENDENCIES_FILE  "external/dependencies.txt"
 
 typedef struct { const char* flag; const char* label; } Lib;
 
@@ -32,14 +33,6 @@ typedef struct {
     char conda[512]; /* transient - never written to disk */
 } Opts;
 
-/* ---------- helpers ---------- */
-
-static int file_exists(const char* path) {
-    FILE* f = fopen(path, "r");
-    if (f) { fclose(f); return 1; }
-    return 0;
-}
-
 static void readline(char* buf, int size) {
     if (fgets(buf, size, stdin)) {
         int len = (int)strlen(buf);
@@ -51,7 +44,17 @@ static void readline(char* buf, int size) {
 
 static int run(const char* cmd) {
     printf("$ %s\n", cmd);
+    fflush(stdout);
     return system(cmd);
+}
+
+static char* trim(char* s) {
+    char* end;
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    end = s + strlen(s);
+    while (end > s && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n'))
+        *--end = '\0';
+    return s;
 }
 
 /* ---------- validated prompts ---------- */
@@ -173,6 +176,72 @@ static void print_libs(const Opts* o) {
         printf("  %-12s %s\n", LIBS[i].flag, o->sel[i] ? "ON" : "OFF");
 }
 
+static int lib_index(const char* flag) {
+    int i;
+    for (i = 0; i < N; i++) {
+        if (strcmp(flag, LIBS[i].flag) == 0) return i;
+    }
+    return -1;
+}
+
+static int validate_project_dependencies(Opts* o) {
+    char line[512];
+    int changed = 0;
+    int any_missing = 0;
+    int missing[N];
+    FILE* f;
+    int i;
+
+    for (i = 0; i < N; i++) missing[i] = 0;
+
+    f = fopen(DEPENDENCIES_FILE, "r");
+    if (!f) {
+        fprintf(stderr, "warning: cannot read %s; skipping dependency validation\n", DEPENDENCIES_FILE);
+        return 0;
+    }
+
+    while (fgets(line, sizeof(line), f)) {
+        char* p = trim(line);
+        char* colon;
+        char* dep;
+        int depender;
+        if (*p == '\0' || *p == '#') continue;
+        colon = strchr(p, ':');
+        if (!colon) continue;
+        *colon = '\0';
+        depender = lib_index(trim(p));
+        if (depender < 0 || !o->sel[depender]) continue;
+
+        dep = strtok(colon + 1, " \t\r\n,");
+        while (dep) {
+            int required = lib_index(dep);
+            if (required >= 0 && !o->sel[required]) {
+                printf("dependency missing: %s requires %s\n", LIBS[depender].flag, LIBS[required].flag);
+                missing[required] = 1;
+                any_missing = 1;
+            }
+            dep = strtok(NULL, " \t\r\n,");
+        }
+    }
+    fclose(f);
+
+    if (!any_missing) return 0;
+
+    if (ask_yesno("Auto-correct")) {
+        for (i = 0; i < N; i++) {
+            if (missing[i]) {
+                o->sel[i] = 1;
+                changed = 1;
+                printf("enabled %s\n", LIBS[i].flag);
+            }
+        }
+    } else {
+        fprintf(stderr, "warning: dependency requirements remain unsatisfied\n");
+    }
+
+    return changed;
+}
+
 /* ---------- preset generation ---------- */
 
 #define MAX_VARS 16
@@ -277,6 +346,7 @@ static void ask_libs(Opts* o) {
 }
 
 static void finish_configure(Opts* o) {
+    validate_project_dependencies(o);
     save_project_opts(o);
     printf("wrote %s\n", PROJECT_OPTS_FILE);
     save_user_opts(o);
@@ -315,6 +385,18 @@ static void load_or_create_user_opts(Opts* o) {
     printf("wrote %s\n", USER_OPTS_FILE);
 }
 
+static void reload_config(Opts* o) {
+    memset(o, 0, sizeof(*o));
+    load_or_create_project_opts(o);
+    if (validate_project_dependencies(o)) {
+        save_project_opts(o);
+        printf("wrote %s\n", PROJECT_OPTS_FILE);
+    }
+    load_or_create_user_opts(o);
+    gen_presets(o);
+    post_configure(o);
+}
+
 /* ---------- build ---------- */
 
 static int do_build(int release) {
@@ -325,6 +407,13 @@ static int do_build(int release) {
     if (r != 0) return r;
     snprintf(cmd, sizeof(cmd), "cmake --build --preset %s", release ? "release" : "debug");
     return run(cmd);
+}
+
+static int do_configured_build(int release) {
+    Opts o;
+    printf("=== metabuild (config reload) ===\n\n");
+    reload_config(&o);
+    return do_build(release);
 }
 
 /* ---------- run ---------- */
@@ -360,7 +449,7 @@ static int do_run(int release) {
     count = collect_exes(build_dir, exes, MAX_EXES);
     if (count == 0) {
         printf("no executables found - building first\n");
-        if (do_build(release) != 0) return 1;
+        if (do_configured_build(release) != 0) return 1;
         count = collect_exes(build_dir, exes, MAX_EXES);
         if (count == 0) { fprintf(stderr, "no executables after build\n"); return 1; }
     }
@@ -408,7 +497,7 @@ int main(int argc, char* argv[]) {
             "usage: ./build_tool [options]\n"
             "\n"
             "build:\n"
-            "  (no flags)       debug build; runs configure if no CMakePresets.json\n"
+            "  (no flags)       reload saved options, then debug build\n"
             "  --release        release build\n"
             "\n"
             "run:\n"
@@ -438,22 +527,9 @@ int main(int argc, char* argv[]) {
 
     if (flag_config) {
         printf("=== metabuild (config reload) ===\n\n");
-        memset(&o, 0, sizeof(o));
-        load_or_create_project_opts(&o);
-        load_or_create_user_opts(&o);
-        gen_presets(&o);
-        post_configure(&o);
+        reload_config(&o);
         return 0;
     }
 
-    if (!file_exists(PRESETS_FILE)) {
-        printf("=== metabuild ===\n\n");
-        memset(&o, 0, sizeof(o));
-        load_or_create_project_opts(&o);
-        load_or_create_user_opts(&o);
-        gen_presets(&o);
-        post_configure(&o);
-    }
-
-    return do_build(flag_release);
+    return do_configured_build(flag_release);
 }
