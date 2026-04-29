@@ -645,3 +645,7 @@ workspace
 .clangd
 public
 logs
+
+build_tool
+CMakePresets.json
+.build_opts

@@ -1,3 +1,5 @@
+if(USE_KNITRO)
+
 set(KNITRO_PATH "/opt/artelys/knitro-15.0.1-Linux64" CACHE PATH "Path to the Knitro installation")
 set(KNITRO_INCLUDE_DIR "${KNITRO_PATH}/include")
 set(KNITRO_LIBRARY "${KNITRO_PATH}/lib/libknitro1501.so")
@@ -28,3 +30,5 @@ set_target_properties(
 )
 
 register_external_target(project_knitro)
+
+endif() # USE_KNITRO

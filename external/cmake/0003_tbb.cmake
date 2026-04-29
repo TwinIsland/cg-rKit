@@ -1,3 +1,5 @@
+if(USE_TBB)
+
 include(FetchContent)
 
 set(TBB_TEST OFF CACHE BOOL "Build oneTBB tests" FORCE)
@@ -22,3 +24,5 @@ elseif(TARGET tbb)
 else()
   message(FATAL_ERROR "oneTBB fetch succeeded but no CMake target was exposed.")
 endif()
+
+endif() # USE_TBB

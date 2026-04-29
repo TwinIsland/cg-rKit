@@ -1,6 +1,7 @@
+if(USE_EIGEN)
+
 include(FetchContent)
 
-# Eigen is header-only.
 fetchcontent_declare(
   external_eigen
   GIT_REPOSITORY "https://gitlab.com/libeigen/eigen.git"
@@ -15,3 +16,5 @@ if(TARGET Eigen3::Eigen)
 else()
   message(FATAL_ERROR "Eigen fetch succeeded but no CMake target was exposed.")
 endif()
+
+endif() # USE_EIGEN
